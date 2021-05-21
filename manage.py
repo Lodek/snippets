@@ -36,25 +36,45 @@ class CommandMixin:
         raise NotImplementedError
 
 
-class Test(CommandMixin):
-    """Run projects tests using Python's unittest module runner"""
+class CommandProxyMixin(CommandMixin):
+    """Helper class that simply proxies a command to a shell,
+    preserving argument"""
+
+    command = "echo"
+    default = None
+    
+    @property
+    def __doc__(self):
+        return f"Runs {self.command} with received arguments"
 
     @classmethod
     def add_args(cls, parser):
-        """Add args to commands"""
-        parser.add_argument("module", nargs="?", default="discover",
-                            help="Module file to run tests for (defaults to discover behavior)")
+        """Takes any number of arguments and sends it to proxied command"""
+        help=f'Arguments that will be sent to "{cls.command}"'
+        if cls.default: 
+            parser.add_argument("args", nargs="*", default=[cls.default], help=help)
+        else:
+            parser.add_argument("args", nargs="*", help=help)
 
-    def run(self, module):
-        from sys import stdout, stderr
-        cmd = "python -m unittest {}".format(module)
-        run(cmd.split(), stdout=stdout, stderr=stderr)
+    def run(self, args):
+        """Joins command defined in self with arguments received and pass it
+        to a shell"""
+        cmd = [token for token in self.command.split(' ') if token]
+        cmd = cmd + args
+        cmd = " ".join(cmd)
+        run(cmd, stdout=sys.stdout, stderr=sys.stderr, shell=True)
+
+
+## Default Command
+class Test(CommandProxyMixin):
+    command = "python -m unittest"
+    default = "discover"
 
 
 # Helpers for main
 def _get_commands():
     """Return dict with all subclasses of CommandMixin"""
-    predicate = lambda value: CommandMixin in getattr(value, "__mro__", []) and value is not CommandMixin
+    predicate = lambda value: CommandMixin in getattr(value, "__mro__", []) and value is not CommandMixin and value is not CommandProxyMixin
     values = globals().values()
     return {value.__name__.lower(): value for value in values if predicate(value)}
 
